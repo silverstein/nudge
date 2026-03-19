@@ -99,7 +99,7 @@ Remove a session from monitoring:
 
 ### `/nudge pause <session>` / `/nudge resume <session>`
 
-Toggle the `paused` flag in sessions.json. Paused sessions stay in the registry but are not nudged.
+Toggle the `paused` flag in sessions.json. Paused sessions stay in the registry but are not nudged. **Resume also resets nudgeCount to 0** and clears hash/hashcount files — otherwise the session immediately hits cooldown from the previous run.
 
 ### `/nudge done <session>`
 
