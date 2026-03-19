@@ -1,0 +1,9 @@
+{
+  "name": "nudge",
+  "version": "1.0.0",
+  "description": "Keep AI coding agents productive. Detects when Codex, Claude Code, or Gemini CLI stalls in tmux and sends continuation signals.",
+  "author": "Mat Silverstein",
+  "license": "MIT",
+  "commands": "commands",
+  "hooks": "hooks/hooks.json"
+}
