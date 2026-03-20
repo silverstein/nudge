@@ -151,6 +151,8 @@ launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.nudge.daemon.plist
 
 Update config values in sessions.json (nudgeMessage, intervalSeconds, cooldownNudges).
 
+**Per-session cooldown override**: Set `cooldownOverride` on any session to override the global `cooldownNudges`. Example: `/nudge config design2 cooldownOverride 100` sets design2 to allow 100 nudges before stopping. Set to `null` to revert to the global default.
+
 ### `/nudge kick <session>`
 
 Immediately nudge a session without waiting for the daemon cycle:

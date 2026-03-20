@@ -255,9 +255,12 @@ jq -r '.sessions | to_entries[] | select(.value.active == true and .value.paused
             ;;
 
         idle)
+            # Per-session cooldown override takes precedence over global
+            session_cooldown=$(jq -r ".sessions[\"$session\"].cooldownOverride // empty" "$SESSIONS_FILE")
+            effective_cooldown="${session_cooldown:-$COOLDOWN}"
             current_count=$(jq -r ".sessions[\"$session\"].nudgeCount // 0" "$SESSIONS_FILE")
-            if (( current_count >= COOLDOWN )); then
-                log "COOL" "$session" "nudge cooldown reached ($current_count/$COOLDOWN) — skipping"
+            if (( current_count >= effective_cooldown )); then
+                log "COOL" "$session" "nudge cooldown reached ($current_count/$effective_cooldown) — skipping"
                 continue
             fi
 
