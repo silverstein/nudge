@@ -16,6 +16,21 @@ machine-readable `NUDGE_STATUS` lines.
 - **Log**: `~/.nudge/nudge.log` -- audit trail
 - **Plist**: `~/Library/LaunchAgents/com.nudge.daemon.plist`
 
+## Agent setup checklist
+
+When an agent is asked to "set up Nudge so Codex can handle long-running
+projects," the safe default workflow is:
+
+1. Install Nudge with `./install.sh`
+2. Verify `tmux`, `jq`, and `codex` are available
+3. Confirm the target repo has a deterministic runner for the next ready work item
+4. Register a `bd_epic` session with `~/scripts/nudge-epic.sh add ...`
+5. Start it with `~/scripts/nudge-epic.sh start ...`
+6. Verify with `/nudge`, `~/scripts/nudge-epic.sh status ...`, and `tail -50 ~/.nudge/nudge.log`
+
+Do not skip step 3. Nudge can supervise long-running work, but it does not
+invent project-specific work-selection logic on its own.
+
 ## Agent Detection
 
 The daemon auto-detects which agent is running in each session:

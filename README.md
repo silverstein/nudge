@@ -63,6 +63,77 @@ On Linux, the install script skips launchd and prints a cron command:
 */3 * * * * ~/scripts/nudge.sh
 ```
 
+## For agents
+
+If you point Codex or Claude Code at this repo and ask it to set up Nudge for
+long-running Codex project work, the agent should be able to do the whole job
+without guessing.
+
+### What the agent should do on the user's machine
+
+1. Install Nudge:
+
+```bash
+git clone https://github.com/silverstein/nudge.git
+cd nudge
+./install.sh
+```
+
+2. Verify the local prerequisites:
+
+```bash
+tmux -V
+jq --version
+codex --help
+```
+
+3. Register a `bd_epic` session for the target repo:
+
+```bash
+~/scripts/nudge-epic.sh add dojo /abs/path/to/repo epic-id --agent-arg=--full-auto
+~/scripts/nudge-epic.sh start dojo
+~/scripts/nudge-epic.sh status dojo
+```
+
+4. Confirm the daemon is tracking the session:
+
+```bash
+/nudge
+tail -50 ~/.nudge/nudge.log
+```
+
+### What the target repo must provide
+
+To make Codex actually keep moving through a long-running project, the target
+repo needs a deterministic runner. Nudge is the supervisor, not the project
+planner.
+
+The target repo should provide:
+
+- a command that can drain the next ready unit of work
+- structured status updates via `NUDGE_STATUS {...}`
+- a sidecar status file via `NUDGE_STATUS_FILE`
+- explicit pause states such as `running`, `waiting_no_ready`, `waiting_blocked`, `waiting_human`, `complete`, and `crashed`
+
+Example runner launch:
+
+```bash
+cd /abs/path/to/repo
+NUDGE_STATUS_FILE="$HOME/.nudge/runtime/dojo.json" node scripts/codex_epic_runner.mjs epic-id -- --full-auto
+```
+
+That split is intentional:
+
+- Nudge owns tmux supervision, daemon scheduling, restart visibility, and dashboard state
+- the target repo owns tracker-aware work selection and per-task Codex prompts
+
+### What the agent should not assume
+
+- Do not assume every repo uses `bd`; `bd_epic` is a pattern, not a universal standard.
+- Do not assume pane scraping alone is reliable; wrapped terminal output can corrupt JSON lines.
+- Do not assume `continue` is the right control signal for `bd_epic` sessions; prefer the runner status and only use `/nudge kick` as a fallback.
+- Do not assume the target repo already has a runner; if it does not, the agent should build or ask for one first.
+
 ## Usage
 
 ### Add a session to monitor
