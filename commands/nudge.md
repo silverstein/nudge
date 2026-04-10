@@ -26,7 +26,7 @@ projects," the safe default workflow is:
 3. Confirm the target repo has a deterministic runner for the next ready work item
 4. Validate the target repo with `~/scripts/nudge-epic.sh doctor ...`
 5. Register it with `~/scripts/nudge-epic.sh bootstrap ... --start`
-6. Verify with `/nudge`, `~/scripts/nudge-epic.sh status ...`, and `tail -50 ~/.nudge/nudge.log`
+6. Verify with `~/scripts/nudge-status.sh`, `~/scripts/nudge-epic.sh status ...`, and `tail -50 ~/.nudge/nudge.log`
 
 Do not skip step 3. Nudge can supervise long-running work, but it does not
 invent project-specific work-selection logic on its own.
@@ -104,6 +104,12 @@ dojo-epic  | bd_epic| running  |     0  |  -   | Drain minutes-ylql.2           
    - If agent finished one task but intent has more -> daemon is correct to keep nudging
    - If looping (hashcount >= 3) -> flag as stuck, suggest manual intervention
    - Report assessment per session
+
+For shell use outside the Claude command surface, the closest equivalent is:
+
+```bash
+~/scripts/nudge-status.sh
+```
 
 ### `/nudge add <session> <intent>`
 
@@ -198,6 +204,11 @@ Right now this highlights:
 - looping sessions
 - sessions whose tmux pane disappeared
 - sessions that hit nudge cooldown
+
+`bd_epic` sessions also support a light auto-restart policy with backoff. When a
+session disappears while its last known runtime state was `running` or
+`crashed`, the daemon can relaunch it automatically, increment `restartCount`,
+and record the restart timestamps in the session registry.
 
 ### `/nudge remove <session>`
 

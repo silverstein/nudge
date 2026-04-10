@@ -9,6 +9,7 @@ cd "$ROOT_DIR"
 bash -n scripts/nudge.sh
 bash -n scripts/nudge-epic.sh
 bash -n scripts/nudge-attention.sh
+bash -n scripts/nudge-status.sh
 bash -n install.sh
 
 tmp_root=$(mktemp -d)
@@ -68,5 +69,23 @@ fi
 attention_output=$(HOME="$home" bash scripts/nudge-epic.sh attention)
 echo "$attention_output" | grep -q "fake-smoke"
 echo "$attention_output" | grep -q "waiting_human"
+
+status_output=$(HOME="$home" bash scripts/nudge-status.sh)
+echo "$status_output" | grep -q "Attention"
+echo "$status_output" | grep -q "fake-smoke"
+
+tmux kill-session -t fake-smoke
+HOME="$home" jq '.sessions["fake-smoke"].runtimeState = "crashed"' "$home/.nudge/sessions.json" > "$home/.nudge/sessions.json.tmp"
+mv "$home/.nudge/sessions.json.tmp" "$home/.nudge/sessions.json"
+HOME="$home" bash scripts/nudge.sh >/dev/null
+sleep 1
+tmux has-session -t fake-smoke
+restart_count=$(HOME="$home" jq -r '.sessions["fake-smoke"].restartCount' "$home/.nudge/sessions.json")
+if [[ "$restart_count" -lt 1 ]]; then
+    echo "Expected restartCount >= 1, got $restart_count" >&2
+    exit 1
+fi
+
+tmux kill-session -t fake-smoke 2>/dev/null || true
 
 echo "nudge contract flow smoke check passed"

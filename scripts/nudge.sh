@@ -16,6 +16,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STATE_DIR="$HOME/.nudge"
 SESSIONS_FILE="$STATE_DIR/sessions.json"
 SNAPSHOTS_DIR="$STATE_DIR/snapshots"
@@ -155,6 +156,87 @@ latest_nudge_status() {
     awk '/NUDGE_STATUS /{line=$0} END{print line}'
 }
 
+resolve_epic_helper() {
+    if [[ -f "$SCRIPT_DIR/nudge-epic.sh" ]]; then
+        printf '%s\n' "$SCRIPT_DIR/nudge-epic.sh"
+        return 0
+    fi
+    if [[ -f "$HOME/scripts/nudge-epic.sh" ]]; then
+        printf '%s\n' "$HOME/scripts/nudge-epic.sh"
+        return 0
+    fi
+    return 1
+}
+
+maybe_restart_epic_session() {
+    local session="$1"
+    local runtime_state="$2"
+
+    local auto_restart
+    auto_restart=$(jq -r ".sessions[\"$session\"].autoRestart // true" "$SESSIONS_FILE")
+    if [[ "$auto_restart" != "true" ]]; then
+        return 1
+    fi
+
+    case "$runtime_state" in
+        running|crashed)
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    local restart_count
+    local max_restarts
+    local cooldown_seconds
+    local last_restart_epoch
+    local now_epoch
+    local now_iso
+    restart_count=$(jq -r ".sessions[\"$session\"].restartCount // 0" "$SESSIONS_FILE")
+    max_restarts=$(jq -r ".sessions[\"$session\"].maxAutoRestarts // 3" "$SESSIONS_FILE")
+    cooldown_seconds=$(jq -r ".sessions[\"$session\"].restartCooldownSeconds // 300" "$SESSIONS_FILE")
+    last_restart_epoch=$(jq -r ".sessions[\"$session\"].lastRestartEpoch // 0" "$SESSIONS_FILE")
+    now_epoch=$(date +%s)
+    now_iso=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+    if (( restart_count >= max_restarts )); then
+        log "RESTART" "$session" "auto-restart limit reached ($restart_count/$max_restarts)"
+        return 1
+    fi
+
+    if (( last_restart_epoch > 0 && now_epoch - last_restart_epoch < cooldown_seconds )); then
+        log "RESTART" "$session" "backoff active (${now_epoch-last_restart_epoch}s < ${cooldown_seconds}s)"
+        return 1
+    fi
+
+    local epic_helper
+    if ! epic_helper=$(resolve_epic_helper); then
+        log "RESTART" "$session" "could not find nudge-epic.sh helper"
+        return 1
+    fi
+
+    if bash "$epic_helper" start "$session" >/dev/null 2>&1; then
+        json_update_args \
+            '
+            .sessions[$session].restartCount = ((.sessions[$session].restartCount // 0) + 1)
+            | .sessions[$session].lastRestartAt = $nowIso
+            | .sessions[$session].lastRestartEpoch = ($nowEpoch | tonumber)
+            | .sessions[$session].runtimeState = "running"
+            | .sessions[$session].lastStatusAt = $nowIso
+            | .sessions[$session].lastStatusReason = "auto-restarted after missing/crashed session"
+            | .sessions[$session].lastExitCode = null
+            ' \
+            --arg session "$session" \
+            --arg nowIso "$now_iso" \
+            --arg nowEpoch "$now_epoch" >/dev/null || true
+        log "RESTART" "$session" "auto-restarted bd_epic session"
+        return 0
+    fi
+
+    log "RESTART" "$session" "auto-restart attempt failed"
+    return 1
+}
+
 # Rotate log if over 500KB
 log_size=$(file_size "$LOG" 2>/dev/null || echo 0)
 if (( log_size > 512000 )); then
@@ -187,9 +269,13 @@ BLOCKED_PATTERN=$(jq -r '.config.blockedPhrases // [] | join("|")' "$SESSIONS_FI
 
 jq -r '.sessions | to_entries[] | select(.value.active == true and .value.paused != true and .value.completedAt == null and .value.depletedAt == null) | .key' "$SESSIONS_FILE" | while read -r session; do
     mode=$(jq -r ".sessions[\"$session\"].mode // \"generic\"" "$SESSIONS_FILE")
+    runtime_state=$(jq -r ".sessions[\"$session\"].runtimeState // \"\"" "$SESSIONS_FILE")
 
     if ! tmux has-session -t "$session" 2>/dev/null; then
         if [[ "$mode" == "bd_epic" ]]; then
+            if maybe_restart_epic_session "$session" "$runtime_state"; then
+                continue
+            fi
             update_runtime_state "$session" "crashed" "" "tmux session not found" ""
         fi
         log "SKIP" "$session" "tmux session not found"

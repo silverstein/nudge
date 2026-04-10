@@ -38,6 +38,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f "$SCRIPTS_DIR/nudge.sh"
     rm -f "$SCRIPTS_DIR/nudge-epic.sh"
     rm -f "$SCRIPTS_DIR/nudge-attention.sh"
+    rm -f "$SCRIPTS_DIR/nudge-status.sh"
     rm -rf "$PLUGIN_DIR"
     info "Removed plugin symlink"
     warn "Config at ~/.nudge/ preserved (remove manually if desired)"
@@ -72,6 +73,10 @@ info "Installed epic helper to $SCRIPTS_DIR/nudge-epic.sh"
 cp "$SCRIPT_DIR/scripts/nudge-attention.sh" "$SCRIPTS_DIR/nudge-attention.sh"
 chmod +x "$SCRIPTS_DIR/nudge-attention.sh"
 info "Installed attention helper to $SCRIPTS_DIR/nudge-attention.sh"
+
+cp "$SCRIPT_DIR/scripts/nudge-status.sh" "$SCRIPTS_DIR/nudge-status.sh"
+chmod +x "$SCRIPTS_DIR/nudge-status.sh"
+info "Installed status helper to $SCRIPTS_DIR/nudge-status.sh"
 
 # --- Create default config if missing ---
 if [[ ! -f "$NUDGE_DIR/sessions.json" ]]; then
@@ -146,6 +151,7 @@ echo "  Quick start:"
 echo "    /nudge add my-session \"Working on feature X\""
 echo "    cp examples/nudge.json /path/to/repo/nudge.json"
 echo "    ~/scripts/nudge-epic.sh bootstrap dojo /path/to/repo epic-id --start"
+echo "    ~/scripts/nudge-status.sh"
 echo "    /nudge status"
 echo "    /nudge help"
 echo ""

@@ -323,6 +323,12 @@ case "$subcommand" in
                   promptFile: (if $promptFile == "" then null else $promptFile end),
                   tmuxSession: $tmuxSession,
                   statusFile: ($statusFile),
+                  autoRestart: true,
+                  restartCount: 0,
+                  maxAutoRestarts: 3,
+                  restartCooldownSeconds: 300,
+                  lastRestartAt: null,
+                  lastRestartEpoch: null,
                   runtimeState: "waiting_no_ready",
                   currentIssue: null,
                   lastStatusAt: null,
@@ -444,6 +450,12 @@ case "$subcommand" in
                   promptFile: (if $promptFile == "" then null else $promptFile end),
                   tmuxSession: $tmuxSession,
                   statusFile: $statusFile,
+                  autoRestart: true,
+                  restartCount: 0,
+                  maxAutoRestarts: 3,
+                  restartCooldownSeconds: 300,
+                  lastRestartAt: null,
+                  lastRestartEpoch: null,
                   runtimeState: "waiting_no_ready",
                   currentIssue: null,
                   lastStatusAt: null,
@@ -551,6 +563,18 @@ case "$subcommand" in
 
         launch_cmd="cd $(printf '%q' "$repo") && NUDGE_STATUS_FILE=$(printf '%q' "$status_file") $runner_cmd"
         tmux new-session -d -s "$tmux_session" "$launch_cmd"
+        now_epoch=$(date +%s)
+        now_iso=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+        json_update_args \
+            '
+            .sessions[$session].runtimeState = "running"
+            | .sessions[$session].currentIssue = null
+            | .sessions[$session].lastStatusAt = $nowIso
+            | .sessions[$session].lastStatusReason = "tmux session launched"
+            | .sessions[$session].lastExitCode = null
+            ' \
+            --arg session "$session" \
+            --arg nowIso "$now_iso" >/dev/null
         echo "Started tmux session '$tmux_session' for bd_epic '$session'"
         ;;
 

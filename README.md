@@ -17,7 +17,7 @@ The highest-leverage setup is:
 1. put a tiny `nudge.json` contract in the target repo
 2. run `~/scripts/nudge-epic.sh doctor /path/to/repo`
 3. run `~/scripts/nudge-epic.sh bootstrap <session> /path/to/repo <epic-id> --start`
-4. use `~/scripts/nudge-attention.sh` when you only want the sessions that need a human
+4. use `~/scripts/nudge-status.sh` for the dashboard and `~/scripts/nudge-attention.sh` when you only want the sessions that need a human
 
 That keeps Nudge simple:
 
@@ -125,7 +125,8 @@ bash scripts/check-contract-flow.sh
 ```
 
 This exercises the contract-based `doctor`, `bootstrap`, `start`, runtime
-status capture, and `attention` flow against a temporary repo.
+status capture, `status`, `attention`, and auto-restart flow against a
+temporary repo.
 
 ## For agents
 
@@ -257,6 +258,7 @@ With Taskmaster as the per-bead engine:
 /nudge              # Dashboard with all sessions
 /nudge log          # Recent activity log
 /nudge eval         # AI-powered deep evaluation of all sessions
+~/scripts/nudge-status.sh   # Attention first, then session summary
 ```
 
 ### Manage sessions
@@ -270,6 +272,7 @@ With Taskmaster as the per-bead engine:
 /nudge kick design     # Immediately send "continue" (skip daemon wait)
 ~/scripts/nudge-epic.sh status dojo  # Show raw bd_epic config + runtime state
 ~/scripts/nudge-attention.sh         # Show only sessions that need a human
+~/scripts/nudge-status.sh            # Attention section + full session summary
 ```
 
 `bd_epic` sessions write structured runner state to `~/.nudge/runtime/<session>.json`
