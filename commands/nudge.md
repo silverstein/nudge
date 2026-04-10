@@ -2,6 +2,11 @@
 
 Manage AI coding agents (Codex, Claude Code, Gemini CLI) running in tmux sessions. Detect stalls, send continuation signals, flag loops.
 
+Nudge also supports a second session type: `bd_epic`. In that mode, Nudge does
+not treat the pane like a generic “maybe send continue” target. Instead, it
+supervises a repo-local epic runner that drains a `bd` epic and emits
+machine-readable `NUDGE_STATUS` lines.
+
 ## Architecture
 
 - **Daemon**: `~/scripts/nudge.sh` -- runs every 3 min via launchd
@@ -37,12 +42,15 @@ Print this quick reference and return:
 ```
 /nudge                        Dashboard: all sessions, state, nudges, context %
 /nudge add <session> <intent> Start monitoring a tmux session
+/nudge add-epic <session> <repo> <epic-id> [--taskmaster]  Register a bd_epic session
 /nudge remove <session>       Stop monitoring, clean up state files
 /nudge pause <session>        Temporarily stop nudging (stays in registry)
 /nudge resume <session>       Resume a paused session
 /nudge done <session>         Mark session as complete
 /nudge reset <session>        Clear completed/depleted/nudges, restart monitoring
 /nudge intent <session> <txt> Update the goal for a session (keep it to one line)
+/nudge start <session>        Start a bd_epic tmux session from saved config
+/nudge epic-status <session>  Show saved bd_epic config + last runtime state
 /nudge kick <session>         Immediately send "continue" (skip daemon wait)
 /nudge eval                   Deep AI evaluation of all active sessions
 /nudge log [N]                Show last N log lines (default 30)
@@ -68,6 +76,7 @@ Session    | Agent  | State    | Nudges | Loop | Intent                         
 x1         | codex  | working  |     3  |  0   | Biz Entity V2                   | 81% left
 design2    | codex  | looping  |     5  |  4   | Styling Tranche                 | 46% left
 minutes    | codex  | idle     |     1  |  0   | Global hotkey feature           | 74% left
+dojo-epic  | bd_epic| running  |     0  |  -   | Drain minutes-ylql.2            | minutes-ylql.2.1
 ```
 
 6. For any session with state idle/looping/asking or nudge count > 5, do an **intelligent evaluation**:
@@ -88,6 +97,47 @@ Add a new tmux session to monitor:
    { "intent": "<intent>", "active": true, "paused": false, "nudgeCount": 0, "lastNudge": null, "completedAt": null, "depletedAt": null }
    ```
 3. Confirm: "Now monitoring `<session>` -- intent: <intent>"
+
+### `/nudge add-epic <session> <repo> <epic-id> [--taskmaster]`
+
+Register a `bd_epic` session using the helper script:
+
+```bash
+~/scripts/nudge-epic.sh add <session> <repo> <epic-id> [--taskmaster] [--agent-arg=--full-auto]
+```
+
+This stores:
+
+- `mode: "bd_epic"`
+- `repo`
+- `epicId`
+- `runner`
+- `agentBin`
+- `agentArgs`
+- `taskmaster`
+- runtime fields like `runtimeState`, `currentIssue`, and `lastStatusReason`
+
+Example:
+
+```bash
+~/scripts/nudge-epic.sh add dojo /Users/silverbook/Sites/minutes minutes-ylql.2 --agent-arg=--full-auto
+```
+
+### `/nudge start <session>`
+
+For `bd_epic` sessions, launch the saved runner into tmux:
+
+```bash
+~/scripts/nudge-epic.sh start <session>
+```
+
+### `/nudge epic-status <session>`
+
+Show the raw saved config for a `bd_epic` session:
+
+```bash
+~/scripts/nudge-epic.sh status <session>
+```
 
 ### `/nudge remove <session>`
 
@@ -161,6 +211,53 @@ tmux send-keys -t <session> -l "continue"
 sleep 0.3
 tmux send-keys -t <session> Enter
 ```
+
+For `bd_epic` sessions, prefer `/nudge start` when no tmux session exists and
+prefer `/nudge epic-status` when the runner reports `waiting_blocked`,
+`waiting_no_ready`, or `waiting_human`. Use `/nudge kick` only as a fallback
+when the runner is visibly sitting at an input prompt.
+
+## `bd_epic` Session Contract
+
+`bd_epic` sessions add these fields under `~/.nudge/sessions.json`:
+
+```json
+{
+  "mode": "bd_epic",
+  "repo": "/abs/repo",
+  "epicId": "minutes-ylql.2",
+  "runner": "node scripts/codex_epic_runner.mjs",
+  "agentBin": "codex",
+  "agentArgs": ["--full-auto"],
+  "taskmaster": false,
+  "promptFile": null,
+  "tmuxSession": "dojo-epic",
+  "statusFile": "/Users/you/.nudge/runtime/dojo-epic.json",
+  "runtimeState": "running",
+  "currentIssue": "minutes-ylql.2.1",
+  "lastStatusAt": "2026-04-10T10:15:00Z",
+  "lastStatusReason": null,
+  "lastExitCode": null
+}
+```
+
+The runner is expected to emit lines in this exact form:
+
+```text
+NUDGE_STATUS {"state":"running","epic":"minutes-ylql.2","issue":"minutes-ylql.2.1"}
+NUDGE_STATUS {"state":"waiting_no_ready","epic":"minutes-ylql.5","reason":"another descendant bead is already in progress"}
+NUDGE_STATUS {"state":"waiting_blocked","epic":"minutes-ylql.5","reason":"remaining descendant beads are blocked"}
+NUDGE_STATUS {"state":"waiting_human","epic":"minutes-ylql.2","issue":"minutes-ylql.2.3","reason":"child bead returned without closing"}
+NUDGE_STATUS {"state":"complete","epic":"minutes-ylql.4"}
+NUDGE_STATUS {"state":"crashed","epic":"minutes-ylql.2","exitCode":1,"reason":"codex exec exited non-zero"}
+```
+
+When the daemon sees these lines, it records the runtime state and stops
+treating the pane like a generic idle shell.
+
+For reliability, `bd_epic` launches should also set `NUDGE_STATUS_FILE` so the
+runner writes the latest status JSON to a sidecar file. The daemon reads that
+file first and only falls back to pane scraping when the sidecar is missing.
 
 ## Implementation Rules
 

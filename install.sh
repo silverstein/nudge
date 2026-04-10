@@ -36,6 +36,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
         info "Removed launchd daemon"
     fi
     rm -f "$SCRIPTS_DIR/nudge.sh"
+    rm -f "$SCRIPTS_DIR/nudge-epic.sh"
     rm -rf "$PLUGIN_DIR"
     info "Removed plugin symlink"
     warn "Config at ~/.nudge/ preserved (remove manually if desired)"
@@ -57,11 +58,15 @@ for cmd in tmux jq; do
 done
 
 # --- Install daemon script ---
-mkdir -p "$SCRIPTS_DIR" "$NUDGE_DIR/snapshots"
+mkdir -p "$SCRIPTS_DIR" "$NUDGE_DIR/snapshots" "$NUDGE_DIR/runtime"
 
 cp "$SCRIPT_DIR/scripts/nudge.sh" "$SCRIPTS_DIR/nudge.sh"
 chmod +x "$SCRIPTS_DIR/nudge.sh"
 info "Installed daemon script to $SCRIPTS_DIR/nudge.sh"
+
+cp "$SCRIPT_DIR/scripts/nudge-epic.sh" "$SCRIPTS_DIR/nudge-epic.sh"
+chmod +x "$SCRIPTS_DIR/nudge-epic.sh"
+info "Installed epic helper to $SCRIPTS_DIR/nudge-epic.sh"
 
 # --- Create default config if missing ---
 if [[ ! -f "$NUDGE_DIR/sessions.json" ]]; then
@@ -134,6 +139,7 @@ info "Installation complete!"
 echo ""
 echo "  Quick start:"
 echo "    /nudge add my-session \"Working on feature X\""
+echo "    ~/scripts/nudge-epic.sh add dojo /path/to/repo epic-id --agent-arg=--full-auto"
 echo "    /nudge status"
 echo "    /nudge help"
 echo ""

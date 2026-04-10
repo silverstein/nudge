@@ -2,6 +2,14 @@
 
 Keep AI coding agents productive. When Codex, Claude Code, or Gemini CLI finishes a task in tmux and stops to wait for input, nudge automatically sends "continue" to keep them going.
 
+Nudge also supports `bd_epic` sessions: instead of nudging a raw agent pane, it
+can supervise a repo-local epic runner that drains a `bd` epic and reports
+structured `NUDGE_STATUS` lines back to the daemon.
+
+This makes Nudge more agent-friendly for long-running project work: one layer
+keeps the session alive, and another layer knows what “the next real unit of
+work” actually is.
+
 ## The problem
 
 AI coding agents (OpenAI Codex, Claude Code, Gemini CLI) frequently pause after completing a task, waiting for human input before moving on. If you're running multiple agents across tmux sessions on long-running work, you end up babysitting them — checking back every few minutes to type "continue."
@@ -25,6 +33,7 @@ Unlike a blind `watch` loop that spams Enter, nudge:
 - **Respects questions** — won't nudge if the agent is asking you something
 - **Tracks intent** — knows what each session is supposed to be working on
 - **Logs everything** — full audit trail of every decision
+- **Understands epic runners** — if a pane emits `NUDGE_STATUS`, nudge records the structured runtime state instead of treating it like a generic idle shell
 
 ## Install
 
@@ -65,6 +74,20 @@ On Linux, the install script skips launchd and prints a cron command:
 # Or edit ~/.nudge/sessions.json directly
 ```
 
+### Add a `bd_epic` session
+
+```bash
+~/scripts/nudge-epic.sh add dojo /Users/silverbook/Sites/minutes minutes-ylql.2 --agent-arg=--full-auto
+~/scripts/nudge-epic.sh start dojo
+```
+
+With Taskmaster as the per-bead engine:
+
+```bash
+~/scripts/nudge-epic.sh add dojo /Users/silverbook/Sites/minutes minutes-ylql.2 --taskmaster --agent-arg=--sandbox --agent-arg=danger-full-access --agent-arg=-a --agent-arg=never
+~/scripts/nudge-epic.sh start dojo
+```
+
 ### Check status
 
 ```
@@ -82,7 +105,32 @@ On Linux, the install script skips launchd and prints a cron command:
 /nudge reset design    # Clear state, restart monitoring
 /nudge remove design   # Remove entirely
 /nudge kick design     # Immediately send "continue" (skip daemon wait)
+~/scripts/nudge-epic.sh status dojo  # Show raw bd_epic config + runtime state
 ```
+
+`bd_epic` sessions write structured runner state to `~/.nudge/runtime/<session>.json`
+via `NUDGE_STATUS_FILE`, so the daemon can track epic progress without relying
+only on wrapped tmux pane text.
+
+### Agent-friendly `bd_epic` contract
+
+`bd_epic` mode is meant for repos that already have a deterministic work runner,
+not for arbitrary shell sessions.
+
+The target repo should provide:
+
+- a runner command that can drain the next ready unit of work
+- structured status updates via `NUDGE_STATUS {...}`
+- a sidecar status file via `NUDGE_STATUS_FILE`
+- explicit pause reasons like `waiting_no_ready`, `waiting_blocked`, and `waiting_human`
+
+That split is intentional:
+
+- `nudge` owns tmux supervision, daemon scheduling, and dashboard state
+- the target repo owns tracker-aware work selection and per-task agent prompts
+
+This keeps `nudge` general-purpose while still making it useful for `bd`-driven
+agent workflows.
 
 ### Update intent
 

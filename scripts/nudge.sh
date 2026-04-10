@@ -87,9 +87,72 @@ json_update() {
     rmdir "$LOCKDIR" 2>/dev/null || true
 }
 
+json_update_args() {
+    local jq_script="$1"
+    shift
+    local max_wait=5
+    local waited=0
+    while ! mkdir "$LOCKDIR" 2>/dev/null; do
+        sleep 0.2
+        waited=$(( waited + 1 ))
+        if (( waited >= max_wait * 5 )); then
+            if [[ -d "$LOCKDIR" ]]; then
+                local lock_age
+                if stat -f%m "$LOCKDIR" &>/dev/null; then
+                    lock_age=$(( $(date +%s) - $(stat -f%m "$LOCKDIR") ))
+                else
+                    lock_age=$(( $(date +%s) - $(stat -c%Y "$LOCKDIR" 2>/dev/null || echo 0) ))
+                fi
+                if (( lock_age > 10 )); then
+                    rmdir "$LOCKDIR" 2>/dev/null || true
+                    continue
+                fi
+            fi
+            log "WARN" "system" "Could not acquire sessions.json lock after ${max_wait}s"
+            return 1
+        fi
+    done
+    if jq "$@" "$jq_script" "$SESSIONS_FILE" > "$SESSIONS_FILE.tmp" 2>/dev/null; then
+        mv "$SESSIONS_FILE.tmp" "$SESSIONS_FILE"
+    else
+        rm -f "$SESSIONS_FILE.tmp"
+        log "WARN" "system" "jq update failed: $jq_script"
+    fi
+    rmdir "$LOCKDIR" 2>/dev/null || true
+}
+
 # Read file contents (avoids cat alias issues)
 read_file() {
     /bin/cat "$1" 2>/dev/null || cat "$1" 2>/dev/null || true
+}
+
+update_runtime_state() {
+    local session="$1"
+    local runtime_state="$2"
+    local current_issue="${3:-}"
+    local status_reason="${4:-}"
+    local exit_code="${5:-}"
+    local ts
+    ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+    json_update_args \
+        '
+        .sessions[$session].runtimeState = $state
+        | .sessions[$session].currentIssue = (if $issue == "" then null else $issue end)
+        | .sessions[$session].lastStatusAt = $ts
+        | .sessions[$session].lastStatusReason = (if $reason == "" then null else $reason end)
+        | .sessions[$session].lastExitCode = (if $exitCode == "" then null else ($exitCode | tonumber?) end)
+        ' \
+        --arg session "$session" \
+        --arg state "$runtime_state" \
+        --arg issue "$current_issue" \
+        --arg reason "$status_reason" \
+        --arg ts "$ts" \
+        --arg exitCode "$exit_code" >/dev/null || true
+}
+
+latest_nudge_status() {
+    awk '/NUDGE_STATUS /{line=$0} END{print line}'
 }
 
 # Rotate log if over 500KB
@@ -123,8 +186,12 @@ BLOCKED_PATTERN=$(jq -r '.config.blockedPhrases // [] | join("|")' "$SESSIONS_FI
 # --- Process each session ---
 
 jq -r '.sessions | to_entries[] | select(.value.active == true and .value.paused != true and .value.completedAt == null and .value.depletedAt == null) | .key' "$SESSIONS_FILE" | while read -r session; do
+    mode=$(jq -r ".sessions[\"$session\"].mode // \"generic\"" "$SESSIONS_FILE")
 
     if ! tmux has-session -t "$session" 2>/dev/null; then
+        if [[ "$mode" == "bd_epic" ]]; then
+            update_runtime_state "$session" "crashed" "" "tmux session not found" ""
+        fi
         log "SKIP" "$session" "tmux session not found"
         continue
     fi
@@ -137,6 +204,65 @@ jq -r '.sessions | to_entries[] | select(.value.active == true and .value.paused
     fi
 
     echo "$content" > "$SNAPSHOTS_DIR/${session}.txt"
+
+    idle_file="$STATE_DIR/${session}.idle"
+
+    if [[ "$mode" == "bd_epic" ]]; then
+        status_json=""
+        status_file=$(jq -r ".sessions[\"$session\"].statusFile // empty" "$SESSIONS_FILE")
+        if [[ -n "$status_file" && -f "$status_file" ]]; then
+            status_json=$(read_file "$status_file")
+        else
+            status_line=$(echo "$content" | latest_nudge_status)
+            if [[ -n "$status_line" ]]; then
+                status_json="${status_line#*NUDGE_STATUS }"
+            fi
+        fi
+
+        if [[ -n "$status_json" ]] && echo "$status_json" | jq -e . >/dev/null 2>&1; then
+            epic_state=$(echo "$status_json" | jq -r '.state // "unknown"')
+            epic_issue=$(echo "$status_json" | jq -r '.issue // ""')
+            epic_reason=$(echo "$status_json" | jq -r '.reason // ""')
+            epic_exit_code=$(echo "$status_json" | jq -r '.exitCode // ""')
+
+            update_runtime_state "$session" "$epic_state" "$epic_issue" "$epic_reason" "$epic_exit_code"
+
+            case "$epic_state" in
+                running)
+                    rm -f "$idle_file"
+                    log "EPIC" "$session" "runner active${epic_issue:+ on $epic_issue}"
+                    continue
+                    ;;
+                waiting_no_ready)
+                    rm -f "$idle_file"
+                    log "EPIC" "$session" "runner waiting for ready work${epic_reason:+ — $epic_reason}"
+                    continue
+                    ;;
+                waiting_blocked)
+                    rm -f "$idle_file"
+                    log "EPIC" "$session" "runner blocked${epic_reason:+ — $epic_reason}"
+                    continue
+                    ;;
+                waiting_human)
+                    rm -f "$idle_file"
+                    log "EPIC" "$session" "runner needs human review${epic_issue:+ on $epic_issue}${epic_reason:+ — $epic_reason}"
+                    continue
+                    ;;
+                complete)
+                    rm -f "$idle_file"
+                    now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+                    json_update "$(printf '.sessions[\"%s\"].completedAt = \"%s\"' "$session" "$now")" >/dev/null || true
+                    log "DONE" "$session" "epic runner reported complete"
+                    continue
+                    ;;
+                crashed)
+                    rm -f "$idle_file"
+                    log "CRASH" "$session" "epic runner reported crash${epic_exit_code:+ (exit $epic_exit_code)}${epic_reason:+ — $epic_reason}"
+                    continue
+                    ;;
+            esac
+        fi
+    fi
 
     # --- Loop detection ---
     snap_hash=$(echo "$content" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^[[:space:]]*$' | tail -20 | hash_text)
@@ -246,8 +372,6 @@ jq -r '.sessions | to_entries[] | select(.value.active == true and .value.paused
     fi
 
     # --- Act on state ---
-
-    idle_file="$STATE_DIR/${session}.idle"
 
     case "$state" in
         working)
