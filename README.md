@@ -10,6 +10,46 @@ This makes Nudge more agent-friendly for long-running project work: one layer
 keeps the session alive, and another layer knows what “the next real unit of
 work” actually is.
 
+## Nudge vs a Ralph loop
+
+A Ralph loop is a useful generic pattern: run an agent, let it stop, then
+restart it with a fresh prompt or fresh context until the broader objective is
+done.
+
+Nudge is solving a different layer of the problem. It is the supervisor for
+real tmux-based agent sessions, and in `bd_epic` mode it can supervise a
+repo-local runner that already knows how to pick the next ready unit of work.
+
+| Dimension | Ralph loop | Nudge |
+|---|---|---|
+| Main job | Repeat/restart an autonomy loop | Supervise long-running tmux agent sessions |
+| Repo awareness | Usually generic | Generic by default, repo-aware via `bd_epic` |
+| tmux visibility | Usually minimal/custom | Built in: dashboard, logs, pause/resume, kick |
+| Blocked / human states | Custom per setup | First-class in `bd_epic` mode |
+| Best for | Broad “keep going” loops | Operational reliability for real sessions |
+
+Use a Ralph loop when:
+
+- you want a generic repeat-until-done pattern
+- the repo does not yet have a deterministic runner
+- fresh-context restart behavior matters more than session supervision
+
+Use Nudge when:
+
+- you already run agents in tmux
+- you want a daemon, dashboard, logs, and pause/resume controls
+- you want explicit runtime states like `running`, `waiting_blocked`, and `waiting_human`
+- you want to supervise a repo-local runner instead of blindly replaying `continue`
+
+Use both when:
+
+- you want fresh-context iteration plus operational supervision
+- the target repo has a deterministic runner and you still want an outer watchdog
+
+Nudge is not trying to replace the Ralph loop idea. It gives long-running agent
+work a real supervisor, and `bd_epic` mode adds tracker-aware orchestration
+when the target repo supports it.
+
 ## The problem
 
 AI coding agents (OpenAI Codex, Claude Code, Gemini CLI) frequently pause after completing a task, waiting for human input before moving on. If you're running multiple agents across tmux sessions on long-running work, you end up babysitting them — checking back every few minutes to type "continue."
