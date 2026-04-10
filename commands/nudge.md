@@ -24,8 +24,8 @@ projects," the safe default workflow is:
 1. Install Nudge with `./install.sh`
 2. Verify `tmux`, `jq`, and `codex` are available
 3. Confirm the target repo has a deterministic runner for the next ready work item
-4. Register a `bd_epic` session with `~/scripts/nudge-epic.sh add ...`
-5. Start it with `~/scripts/nudge-epic.sh start ...`
+4. Validate the target repo with `~/scripts/nudge-epic.sh doctor ...`
+5. Register it with `~/scripts/nudge-epic.sh bootstrap ... --start`
 6. Verify with `/nudge`, `~/scripts/nudge-epic.sh status ...`, and `tail -50 ~/.nudge/nudge.log`
 
 Do not skip step 3. Nudge can supervise long-running work, but it does not
@@ -58,6 +58,8 @@ Print this quick reference and return:
 /nudge                        Dashboard: all sessions, state, nudges, context %
 /nudge add <session> <intent> Start monitoring a tmux session
 /nudge add-epic <session> <repo> <epic-id> [--taskmaster]  Register a bd_epic session
+/nudge bootstrap <session> <repo> <epic-id> [--start]      Read repo contract + create a bd_epic session
+/nudge doctor <repo>          Validate a target repo's nudge.json contract
 /nudge remove <session>       Stop monitoring, clean up state files
 /nudge pause <session>        Temporarily stop nudging (stays in registry)
 /nudge resume <session>       Resume a paused session
@@ -67,6 +69,7 @@ Print this quick reference and return:
 /nudge start <session>        Start a bd_epic tmux session from saved config
 /nudge epic-status <session>  Show saved bd_epic config + last runtime state
 /nudge kick <session>         Immediately send "continue" (skip daemon wait)
+/nudge attention              Show only sessions that need a human
 /nudge eval                   Deep AI evaluation of all active sessions
 /nudge log [N]                Show last N log lines (default 30)
 /nudge config <key> <value>   Update daemon config (nudgeMessage, cooldownNudges)
@@ -113,6 +116,33 @@ Add a new tmux session to monitor:
    ```
 3. Confirm: "Now monitoring `<session>` -- intent: <intent>"
 
+### `/nudge doctor <repo>`
+
+Validate the target repo before you try to bootstrap it:
+
+```bash
+~/scripts/nudge-epic.sh doctor <repo>
+```
+
+Checks:
+
+- `nudge.json` exists and parses
+- contract version is supported
+- `session_modes.bd_epic.runner` exists
+- required commands are available
+- required files exist in the repo
+
+### `/nudge bootstrap <session> <repo> <epic-id> [--start]`
+
+Read the target repo contract and create a `bd_epic` session from it:
+
+```bash
+~/scripts/nudge-epic.sh bootstrap <session> <repo> <epic-id> [--start] [--taskmaster]
+```
+
+This is the preferred setup path for agents, because it removes hand-built
+session config and reuses the target repo's declared runner contract.
+
 ### `/nudge add-epic <session> <repo> <epic-id> [--taskmaster]`
 
 Register a `bd_epic` session using the helper script:
@@ -153,6 +183,21 @@ Show the raw saved config for a `bd_epic` session:
 ```bash
 ~/scripts/nudge-epic.sh status <session>
 ```
+
+### `/nudge attention`
+
+Show only sessions that need a human:
+
+```bash
+~/scripts/nudge-attention.sh
+```
+
+Right now this highlights:
+
+- `bd_epic` sessions in `waiting_human`, `waiting_blocked`, or `crashed`
+- looping sessions
+- sessions whose tmux pane disappeared
+- sessions that hit nudge cooldown
 
 ### `/nudge remove <session>`
 
@@ -239,6 +284,7 @@ when the runner is visibly sitting at an input prompt.
 ```json
 {
   "mode": "bd_epic",
+  "runnerInterface": "codex_epic_v1",
   "repo": "/abs/repo",
   "epicId": "minutes-ylql.2",
   "runner": "node scripts/codex_epic_runner.mjs",
@@ -273,6 +319,13 @@ treating the pane like a generic idle shell.
 For reliability, `bd_epic` launches should also set `NUDGE_STATUS_FILE` so the
 runner writes the latest status JSON to a sidecar file. The daemon reads that
 file first and only falls back to pane scraping when the sidecar is missing.
+
+Right now the helper expects `runnerInterface: "codex_epic_v1"`. That means
+the target repo's runner must accept this shape:
+
+```bash
+<runner> <epic-id> [--taskmaster] [--codex-bin <bin>] [--prompt-file <path>] -- <agent-args...>
+```
 
 ## Implementation Rules
 

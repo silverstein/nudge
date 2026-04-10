@@ -10,6 +10,21 @@ This makes Nudge more agent-friendly for long-running project work: one layer
 keeps the session alive, and another layer knows what “the next real unit of
 work” actually is.
 
+## The 100x-simple path
+
+The highest-leverage setup is:
+
+1. put a tiny `nudge.json` contract in the target repo
+2. run `~/scripts/nudge-epic.sh doctor /path/to/repo`
+3. run `~/scripts/nudge-epic.sh bootstrap <session> /path/to/repo <epic-id> --start`
+4. use `~/scripts/nudge-attention.sh` when you only want the sessions that need a human
+
+That keeps Nudge simple:
+
+- Nudge owns supervision
+- the target repo owns task selection
+- the repo contract removes setup guesswork for agents
+
 ## Nudge vs a Ralph loop
 
 A Ralph loop is a useful generic pattern: run an agent, let it stop, then
@@ -103,6 +118,15 @@ On Linux, the install script skips launchd and prints a cron command:
 */3 * * * * ~/scripts/nudge.sh
 ```
 
+### Maintainer smoke check
+
+```bash
+bash scripts/check-contract-flow.sh
+```
+
+This exercises the contract-based `doctor`, `bootstrap`, `start`, runtime
+status capture, and `attention` flow against a temporary repo.
+
 ## For agents
 
 If you point Codex or Claude Code at this repo and ask it to set up Nudge for
@@ -130,8 +154,8 @@ codex --help
 3. Register a `bd_epic` session for the target repo:
 
 ```bash
-~/scripts/nudge-epic.sh add dojo /abs/path/to/repo epic-id --agent-arg=--full-auto
-~/scripts/nudge-epic.sh start dojo
+~/scripts/nudge-epic.sh doctor /abs/path/to/repo
+~/scripts/nudge-epic.sh bootstrap dojo /abs/path/to/repo epic-id --start
 ~/scripts/nudge-epic.sh status dojo
 ```
 
@@ -148,7 +172,36 @@ To make Codex actually keep moving through a long-running project, the target
 repo needs a deterministic runner. Nudge is the supervisor, not the project
 planner.
 
-The target repo should provide:
+The target repo should provide a root `nudge.json` file:
+
+```json
+{
+  "version": 1,
+  "session_modes": {
+    "bd_epic": {
+      "runner_interface": "codex_epic_v1",
+      "runner": "node scripts/codex_epic_runner.mjs",
+      "default_agent_bin": "codex",
+      "default_agent_args": ["--full-auto"],
+      "default_taskmaster": false,
+      "status_file_env": "NUDGE_STATUS_FILE",
+      "states": [
+        "running",
+        "waiting_no_ready",
+        "waiting_blocked",
+        "waiting_human",
+        "complete",
+        "crashed"
+      ],
+      "required_commands": ["node", "codex", "bd"],
+      "required_files": ["scripts/codex_epic_runner.mjs"]
+    }
+  }
+}
+```
+
+The target repo should also provide a runner that implements the
+`codex_epic_v1` interface:
 
 - a command that can drain the next ready unit of work
 - structured status updates via `NUDGE_STATUS {...}`
@@ -188,15 +241,14 @@ That split is intentional:
 ### Add a `bd_epic` session
 
 ```bash
-~/scripts/nudge-epic.sh add dojo /Users/silverbook/Sites/minutes minutes-ylql.2 --agent-arg=--full-auto
-~/scripts/nudge-epic.sh start dojo
+~/scripts/nudge-epic.sh doctor /Users/silverbook/Sites/minutes
+~/scripts/nudge-epic.sh bootstrap dojo /Users/silverbook/Sites/minutes minutes-ylql.2 --start
 ```
 
 With Taskmaster as the per-bead engine:
 
 ```bash
-~/scripts/nudge-epic.sh add dojo /Users/silverbook/Sites/minutes minutes-ylql.2 --taskmaster --agent-arg=--sandbox --agent-arg=danger-full-access --agent-arg=-a --agent-arg=never
-~/scripts/nudge-epic.sh start dojo
+~/scripts/nudge-epic.sh bootstrap dojo /Users/silverbook/Sites/minutes minutes-ylql.2 --start --taskmaster --agent-arg=--sandbox --agent-arg=danger-full-access --agent-arg=-a --agent-arg=never
 ```
 
 ### Check status
@@ -217,6 +269,7 @@ With Taskmaster as the per-bead engine:
 /nudge remove design   # Remove entirely
 /nudge kick design     # Immediately send "continue" (skip daemon wait)
 ~/scripts/nudge-epic.sh status dojo  # Show raw bd_epic config + runtime state
+~/scripts/nudge-attention.sh         # Show only sessions that need a human
 ```
 
 `bd_epic` sessions write structured runner state to `~/.nudge/runtime/<session>.json`
@@ -242,6 +295,9 @@ That split is intentional:
 
 This keeps `nudge` general-purpose while still making it useful for `bd`-driven
 agent workflows.
+
+You can start from [examples/nudge.json](examples/nudge.json)
+and copy it into the target repo root as `nudge.json`.
 
 ### Update intent
 

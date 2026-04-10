@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "session_modes": {
+    "bd_epic": {
+      "runner_interface": "codex_epic_v1",
+      "runner": "node scripts/codex_epic_runner.mjs",
+      "default_agent_bin": "codex",
+      "default_agent_args": ["--full-auto"],
+      "default_taskmaster": false,
+      "status_file_env": "NUDGE_STATUS_FILE",
+      "states": [
+        "running",
+        "waiting_no_ready",
+        "waiting_blocked",
+        "waiting_human",
+        "complete",
+        "crashed"
+      ],
+      "required_commands": ["node", "codex", "bd"],
+      "required_files": ["scripts/codex_epic_runner.mjs"]
+    }
+  }
+}
