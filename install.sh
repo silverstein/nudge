@@ -148,18 +148,16 @@ if [[ "${1:-}" != "--daemon" ]]; then
     ln -s "$SCRIPT_DIR" "$PLUGIN_DIR"
     info "Installed Claude Code plugin (symlinked to $SCRIPT_DIR)"
 
-    # Codex prompt: Codex does NOT follow symlinks in its prompts dir, so we
-    # copy the file. Re-run install.sh to refresh after editing commands/nudge.md.
-    # commands/nudge.md already carries the YAML frontmatter Codex requires
-    # (name + description); Claude Code tolerates it.
+    # Codex prompt: reuse the same command file so both agents stay in sync.
+    # Codex requires YAML frontmatter (name + description) — already present in
+    # commands/nudge.md, Claude Code tolerates it.
     if [[ -d "$HOME_DIR/.codex" ]]; then
         mkdir -p "$CODEX_PROMPT_DIR"
         if [[ -L "$CODEX_PROMPT_LINK" || -f "$CODEX_PROMPT_LINK" ]]; then
             rm -f "$CODEX_PROMPT_LINK"
         fi
-        cp "$SCRIPT_DIR/commands/nudge.md" "$CODEX_PROMPT_LINK"
-        info "Installed Codex prompt (copied to $CODEX_PROMPT_LINK)"
-        info "  Note: Codex ignores symlinked prompts. Re-run ./install.sh after editing commands/nudge.md."
+        ln -s "$SCRIPT_DIR/commands/nudge.md" "$CODEX_PROMPT_LINK"
+        info "Installed Codex prompt (symlinked to $SCRIPT_DIR/commands/nudge.md)"
     else
         warn "~/.codex not found — skipping Codex prompt install"
     fi
