@@ -1,10 +1,10 @@
 #!/bin/bash
-# Install the nudge daemon and Claude Code plugin.
+# Install the nudge daemon and the /nudge slash command for Claude Code + Codex.
 #
 # Usage:
-#   ./install.sh              # Install daemon + Claude Code plugin
+#   ./install.sh              # Install daemon + Claude Code plugin + Codex prompt
 #   ./install.sh --daemon     # Install daemon only
-#   ./install.sh --uninstall  # Remove daemon and plugin
+#   ./install.sh --uninstall  # Remove daemon, plugin, and Codex prompt
 
 set -euo pipefail
 
@@ -16,6 +16,8 @@ PLIST_NAME="com.nudge.daemon.plist"
 PLIST_SRC="$SCRIPT_DIR/scripts/$PLIST_NAME"
 PLIST_DST="$HOME_DIR/Library/LaunchAgents/$PLIST_NAME"
 PLUGIN_DIR="$HOME_DIR/.claude/plugins/nudge"
+CODEX_PROMPT_DIR="$HOME_DIR/.codex/prompts"
+CODEX_PROMPT_LINK="$CODEX_PROMPT_DIR/nudge.md"
 
 # Colors
 RED='\033[0;31m'
@@ -40,7 +42,11 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f "$SCRIPTS_DIR/nudge-attention.sh"
     rm -f "$SCRIPTS_DIR/nudge-status.sh"
     rm -rf "$PLUGIN_DIR"
-    info "Removed plugin symlink"
+    info "Removed Claude Code plugin symlink"
+    if [[ -L "$CODEX_PROMPT_LINK" ]]; then
+        rm -f "$CODEX_PROMPT_LINK"
+        info "Removed Codex prompt symlink"
+    fi
     warn "Config at ~/.nudge/ preserved (remove manually if desired)"
     info "Done."
     exit 0
@@ -132,7 +138,7 @@ else
     echo "  */3 * * * * $SCRIPTS_DIR/nudge.sh"
 fi
 
-# --- Install Claude Code plugin ---
+# --- Install Claude Code plugin + Codex prompt ---
 if [[ "${1:-}" != "--daemon" ]]; then
     mkdir -p "$HOME_DIR/.claude/plugins"
     # Symlink to the repo so updates are automatic
@@ -141,7 +147,22 @@ if [[ "${1:-}" != "--daemon" ]]; then
     fi
     ln -s "$SCRIPT_DIR" "$PLUGIN_DIR"
     info "Installed Claude Code plugin (symlinked to $SCRIPT_DIR)"
-    info "Use /nudge in Claude Code to manage sessions"
+
+    # Codex prompt: reuse the same command file so both agents stay in sync.
+    # Codex requires YAML frontmatter (name + description) — already present in
+    # commands/nudge.md, Claude Code tolerates it.
+    if [[ -d "$HOME_DIR/.codex" ]]; then
+        mkdir -p "$CODEX_PROMPT_DIR"
+        if [[ -L "$CODEX_PROMPT_LINK" || -f "$CODEX_PROMPT_LINK" ]]; then
+            rm -f "$CODEX_PROMPT_LINK"
+        fi
+        ln -s "$SCRIPT_DIR/commands/nudge.md" "$CODEX_PROMPT_LINK"
+        info "Installed Codex prompt (symlinked to $SCRIPT_DIR/commands/nudge.md)"
+    else
+        warn "~/.codex not found — skipping Codex prompt install"
+    fi
+
+    info "Use /nudge in Claude Code or Codex to manage sessions"
 fi
 
 echo ""
