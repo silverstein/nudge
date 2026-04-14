@@ -1,3 +1,9 @@
+---
+name: nudge
+description: Manage AI agent fleets (Codex, Claude Code, Gemini) running in tmux. Dashboard over monitored sessions, add/pause/resume/done/reset/kick sessions, eval stalled ones, read logs, tune config. Use when the user says "nudge status", "check my sessions", "is session X done", "pause agent Y", or references the ~/.nudge daemon, sessions.json, or bd_epic runners.
+argument-hint: status, add <session> <intent>, done <session>, pause <session>, kick <session>, eval, log, help
+---
+
 # Nudge -- Intelligent Agent Fleet Monitor
 
 Manage AI coding agents (Codex, Claude Code, Gemini CLI) running in tmux sessions. Detect stalls, send continuation signals, flag loops.

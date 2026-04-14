@@ -102,7 +102,13 @@ This installs:
 - `~/scripts/nudge.sh` — the daemon script
 - `~/Library/LaunchAgents/com.nudge.daemon.plist` — launchd agent (macOS, runs every 3 min)
 - `~/.nudge/` — config, snapshots, and logs
-- Claude Code plugin (symlinked, gives you the `/nudge` command)
+- Claude Code plugin at `~/.claude/plugins/nudge` (symlinked, gives you `/nudge`)
+- Shared skill at `~/.agents/skills/nudge/SKILL.md` (symlinked to `commands/nudge.md`)
+- Codex skill at `~/.codex/skills/nudge → ../../.agents/skills/nudge` (gives you `$nudge` in the Codex composer)
+
+All three point back at the same `commands/nudge.md`, so one edit flows to every agent.
+
+**Why both `/nudge` and `$nudge`?** Claude Code exposes custom commands via a slash popup; Codex exposes skills via a `$`-mention popup (type `$` then the skill name, pick it, and Codex injects the skill into your prompt). They are two different surface mechanisms for the same underlying command set. Codex does not read `~/.codex/prompts/` for custom slash commands — that is a RepoPrompt convention, not a Codex one.
 
 ### Requirements
 

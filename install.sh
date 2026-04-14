@@ -1,10 +1,10 @@
 #!/bin/bash
-# Install the nudge daemon and Claude Code plugin.
+# Install the nudge daemon + slash command for Claude Code + $-mention skill for Codex.
 #
 # Usage:
-#   ./install.sh              # Install daemon + Claude Code plugin
+#   ./install.sh              # Install daemon + Claude plugin + Codex skill
 #   ./install.sh --daemon     # Install daemon only
-#   ./install.sh --uninstall  # Remove daemon and plugin
+#   ./install.sh --uninstall  # Remove daemon, Claude plugin, and Codex skill
 
 set -euo pipefail
 
@@ -16,6 +16,9 @@ PLIST_NAME="com.nudge.daemon.plist"
 PLIST_SRC="$SCRIPT_DIR/scripts/$PLIST_NAME"
 PLIST_DST="$HOME_DIR/Library/LaunchAgents/$PLIST_NAME"
 PLUGIN_DIR="$HOME_DIR/.claude/plugins/nudge"
+AGENTS_SKILL_DIR="$HOME_DIR/.agents/skills/nudge"
+AGENTS_SKILL_FILE="$AGENTS_SKILL_DIR/SKILL.md"
+CODEX_SKILL_LINK="$HOME_DIR/.codex/skills/nudge"
 
 # Colors
 RED='\033[0;31m'
@@ -40,7 +43,16 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f "$SCRIPTS_DIR/nudge-attention.sh"
     rm -f "$SCRIPTS_DIR/nudge-status.sh"
     rm -rf "$PLUGIN_DIR"
-    info "Removed plugin symlink"
+    info "Removed Claude Code plugin symlink"
+    if [[ -L "$CODEX_SKILL_LINK" ]]; then
+        rm -f "$CODEX_SKILL_LINK"
+        info "Removed Codex skill symlink"
+    fi
+    if [[ -L "$AGENTS_SKILL_FILE" ]]; then
+        rm -f "$AGENTS_SKILL_FILE"
+        rmdir "$AGENTS_SKILL_DIR" 2>/dev/null || true
+        info "Removed ~/.agents/skills/nudge symlink"
+    fi
     warn "Config at ~/.nudge/ preserved (remove manually if desired)"
     info "Done."
     exit 0
@@ -132,16 +144,39 @@ else
     echo "  */3 * * * * $SCRIPTS_DIR/nudge.sh"
 fi
 
-# --- Install Claude Code plugin ---
+# --- Install Claude Code plugin + Codex skill ---
 if [[ "${1:-}" != "--daemon" ]]; then
+    # Claude Code plugin (gives /nudge in Claude Code)
     mkdir -p "$HOME_DIR/.claude/plugins"
-    # Symlink to the repo so updates are automatic
     if [[ -L "$PLUGIN_DIR" ]]; then
         rm "$PLUGIN_DIR"
     fi
     ln -s "$SCRIPT_DIR" "$PLUGIN_DIR"
     info "Installed Claude Code plugin (symlinked to $SCRIPT_DIR)"
     info "Use /nudge in Claude Code to manage sessions"
+
+    # Codex skill (gives $nudge in Codex). The Codex TUI's skill popup ($ prefix)
+    # loads SkillMetadata from ~/.codex/skills/*/SKILL.md — NOT from
+    # ~/.codex/prompts/ (which is an unrelated RepoPrompt convention).
+    # Convention on this machine: ~/.codex/skills/<name> -> ../../.agents/skills/<name>.
+    # We mirror that so the skill is shared with any other agent that reads ~/.agents.
+    mkdir -p "$AGENTS_SKILL_DIR"
+    if [[ -L "$AGENTS_SKILL_FILE" || -f "$AGENTS_SKILL_FILE" ]]; then
+        rm -f "$AGENTS_SKILL_FILE"
+    fi
+    ln -s "$SCRIPT_DIR/commands/nudge.md" "$AGENTS_SKILL_FILE"
+    info "Installed ~/.agents/skills/nudge/SKILL.md (symlinked to $SCRIPT_DIR/commands/nudge.md)"
+
+    if [[ -d "$HOME_DIR/.codex/skills" ]]; then
+        if [[ -L "$CODEX_SKILL_LINK" || -e "$CODEX_SKILL_LINK" ]]; then
+            rm -rf "$CODEX_SKILL_LINK"
+        fi
+        ln -s "../../.agents/skills/nudge" "$CODEX_SKILL_LINK"
+        info "Installed Codex skill at $CODEX_SKILL_LINK"
+        info "Use \$nudge in Codex to reference the skill"
+    else
+        warn "~/.codex/skills not found — skipping Codex skill install"
+    fi
 fi
 
 echo ""
