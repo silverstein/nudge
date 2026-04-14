@@ -102,10 +102,10 @@ This installs:
 - `~/scripts/nudge.sh` — the daemon script
 - `~/Library/LaunchAgents/com.nudge.daemon.plist` — launchd agent (macOS, runs every 3 min)
 - `~/.nudge/` — config, snapshots, and logs
-- Claude Code plugin at `~/.claude/plugins/nudge` (symlinked)
-- Codex prompt at `~/.codex/prompts/nudge.md` (symlinked, if `~/.codex` exists)
+- Claude Code plugin at `~/.claude/plugins/nudge` (symlinked — edits flow live)
+- Codex prompt at `~/.codex/prompts/nudge.md` (copied — Codex ignores symlinks; re-run `./install.sh` after editing `commands/nudge.md`)
 
-Both symlinks point at the same `commands/nudge.md`, so `/nudge` is the same command in Claude Code and Codex — one file to edit, updates flow to both.
+Both are sourced from the same `commands/nudge.md`. The installer also gives it the YAML frontmatter Codex requires (`name`, `description`).
 
 ### Requirements
 
