@@ -160,12 +160,18 @@ if [[ "${1:-}" != "--daemon" ]]; then
     # ~/.codex/prompts/ (which is an unrelated RepoPrompt convention).
     # Convention on this machine: ~/.codex/skills/<name> -> ../../.agents/skills/<name>.
     # We mirror that so the skill is shared with any other agent that reads ~/.agents.
+    #
+    # IMPORTANT: Codex does NOT follow symlinked SKILL.md files — the skill
+    # silently fails to load. So the SKILL.md itself must be a regular file
+    # (cp), even though the ~/.codex/skills/<name> dir can be a symlink into
+    # ~/.agents/skills/<name>. Re-run ./install.sh after editing
+    # commands/nudge.md to refresh the copy.
     mkdir -p "$AGENTS_SKILL_DIR"
     if [[ -L "$AGENTS_SKILL_FILE" || -f "$AGENTS_SKILL_FILE" ]]; then
         rm -f "$AGENTS_SKILL_FILE"
     fi
-    ln -s "$SCRIPT_DIR/commands/nudge.md" "$AGENTS_SKILL_FILE"
-    info "Installed ~/.agents/skills/nudge/SKILL.md (symlinked to $SCRIPT_DIR/commands/nudge.md)"
+    cp "$SCRIPT_DIR/commands/nudge.md" "$AGENTS_SKILL_FILE"
+    info "Installed ~/.agents/skills/nudge/SKILL.md (copied from $SCRIPT_DIR/commands/nudge.md)"
 
     if [[ -d "$HOME_DIR/.codex/skills" ]]; then
         if [[ -L "$CODEX_SKILL_LINK" || -e "$CODEX_SKILL_LINK" ]]; then
