@@ -1,8 +1,3 @@
----
-name: nudge
-description: Manage AI agent fleets (Codex, Claude Code, Gemini) in tmux — status dashboard, add/pause/done/reset/kick, eval, log, config
----
-
 # Nudge -- Intelligent Agent Fleet Monitor
 
 Manage AI coding agents (Codex, Claude Code, Gemini CLI) running in tmux sessions. Detect stalls, send continuation signals, flag loops.
